@@ -280,12 +280,23 @@
     });
 
     el.addEventListener('pointermove', (e) => {
-      if (!start || settings.lockPos) return;
+      if (!start) return;
       const dx = e.clientX - start.px;
       const dy = e.clientY - start.py;
       if (!start.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       start.moved = true;
       el.classList.add('dragging');
+      if (settings.lockPos) {
+        // Khi khóa vị trí: kéo sẽ làm nhân vật giãn nhẹ đàn hồi như thạch (giới hạn tối đa ~16%)
+        body.classList.remove('jelly');
+        const tx = Math.tanh(dx / 90) * 14;
+        const ty = Math.tanh(dy / 90) * 14;
+        const sx = 1 + Math.tanh(Math.abs(dx) / 110) * 0.16 - Math.tanh(Math.abs(dy) / 110) * 0.08;
+        const sy = 1 + Math.tanh(Math.abs(dy) / 110) * 0.16 - Math.tanh(Math.abs(dx) / 110) * 0.08;
+        const rot = Math.tanh(dx / 110) * 4;
+        body.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+        return;
+      }
       const pos = clampPos(el, { x: start.x + dx, y: start.y + dy });
       el.style.left = pos.x + 'px';
       el.style.top = pos.y + 'px';
@@ -296,11 +307,16 @@
       const moved = start.moved;
       start = null;
       el.classList.remove('dragging');
+      body.style.transform = '';
       try { el.releasePointerCapture(e.pointerId); } catch (_) {}
       if (moved) {
-        const rect = el.getBoundingClientRect();
-        settings[key] = { x: Math.round(rect.left), y: Math.round(rect.top) };
-        save({ [key]: settings[key] });
+        if (settings.lockPos) {
+          jelly();
+        } else {
+          const rect = el.getBoundingClientRect();
+          settings[key] = { x: Math.round(rect.left), y: Math.round(rect.top) };
+          save({ [key]: settings[key] });
+        }
       } else if (e.type === 'pointerup') {
         handleClick();
       }
