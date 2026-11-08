@@ -370,7 +370,7 @@
   /* ==========================================================================
      3. ANIMATION STATE MACHINE
      ========================================================================== */
-  const IMPRESS_LOOPS = 2;   // impress.gif ngắn (~2.5s) nên phát 2 vòng
+  const IMPRESS_LOOPS = 4;   // impress.gif (~2.55s) -> phát 4 vòng (~10.2s) rồi về idle
   let currentState = null;   // 'idle' | 'think' | 'write' | 'impress'
   let stateToken = 0;        // tăng mỗi lần đổi state để huỷ hẹn giờ cũ
   let leisureKey = 'leisure2';

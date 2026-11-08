@@ -8,7 +8,7 @@ Extension Chrome thêm nhân vật Remielle vào https://gemini.google.com.
 | `leisure1.gif` ↔ `leisure2.gif` | Gemini rảnh – mỗi GIF chạy hết 1 vòng rồi đổi sang GIF kia |
 | `think.gif` | Gemini đang suy nghĩ (đã gửi câu hỏi, chưa có chữ trả lời) |
 | `write.gif` | Gemini đang viết câu trả lời ra |
-| `impress.gif` | Gemini vừa trả lời xong (phát 2 vòng rồi về trạng thái rảnh) |
+| `impress.gif` | Gemini vừa trả lời xong (phát 4 vòng ~10s rồi về trạng thái rảnh) |
 
 ## Cài đặt
 1. Mở `chrome://extensions`, bật **Developer mode**.
