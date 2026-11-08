@@ -1,4 +1,4 @@
-#NOTE: project này 100% vide code, chủ tút đ biết gì về code
+#NOTE: project này 100% vide code, chủ tút đ biết gì về code 
 # Remielle – Gemini Companion
 
 Extension Chrome thêm nhân vật Remielle vào https://gemini.google.com.
