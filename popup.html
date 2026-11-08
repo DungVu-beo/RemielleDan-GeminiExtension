@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Remielle</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <img src="icons/icon48.png" alt="" class="logo">
+    <div>
+      <h2>Remielle</h2>
+      <span class="version">Gemini Companion v1.0.0</span>
+    </div>
+    <label class="switch" title="Bật / tắt">
+      <input type="checkbox" id="enabled">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="content">
+    <div class="row">
+      <span>💕 Hiện kiss (bên trái)</span>
+      <label class="switch small"><input type="checkbox" id="showKiss"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <span>✨ Hiện nhân vật trạng thái</span>
+      <label class="switch small"><input type="checkbox" id="showMascot"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <span>🔒 Khóa vị trí</span>
+      <label class="switch small"><input type="checkbox" id="lockPos"><span class="slider"></span></label>
+    </div>
+
+    <div class="range">
+      <div class="range-label"><span>Kích thước kiss</span><b id="kissSizeVal"></b></div>
+      <input type="range" id="kissSize" min="100" max="450" step="10">
+    </div>
+    <div class="range">
+      <div class="range-label"><span>Kích thước nhân vật</span><b id="mascotSizeVal"></b></div>
+      <input type="range" id="mascotSize" min="80" max="350" step="10">
+    </div>
+    <div class="range">
+      <div class="range-label"><span>Độ trong suốt</span><b id="opacityVal"></b></div>
+      <input type="range" id="opacity" min="20" max="100" step="5">
+    </div>
+
+    <button id="resetPos" class="btn">↺ Đặt lại vị trí mặc định</button>
+
+    <div class="legend">
+      <div><b>Rảnh</b> → leisure1 / leisure2 luân phiên</div>
+      <div><b>Suy nghĩ</b> → think</div>
+      <div><b>Đang viết</b> → write</div>
+      <div><b>Vừa trả lời xong</b> → impress</div>
+    </div>
+  </div>
+
+  <div class="footer">Nhấn: jelly • Kéo thả: di chuyển • Nhấp đúp: về chỗ cũ</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
