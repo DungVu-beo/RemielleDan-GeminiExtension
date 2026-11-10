@@ -26,6 +26,7 @@
     kissSize: 200,     // chiều rộng kiss.gif (px)
     mascotSize: 170,   // kích thước nhân vật trạng thái (px)
     opacity: 100,      // %
+    jellyLevel: 100,   // mức độ hiệu ứng jelly / đàn hồi (0 - 200%)
     lockPos: false,    // khóa kéo thả & nhấp đúp đặt lại vị trí
     kissPos: null,     // {x, y} khi người dùng kéo thả
     mascotPos: null
@@ -150,11 +151,11 @@
     }
     @keyframes rm-jelly {
       0%   { transform: scale(1, 1); }
-      18%  { transform: scale(1.18, 0.82); }
-      34%  { transform: scale(0.86, 1.14) rotate(-2deg); }
-      50%  { transform: scale(1.08, 0.93) rotate(1.5deg); }
-      66%  { transform: scale(0.96, 1.04) rotate(-0.8deg); }
-      82%  { transform: scale(1.02, 0.98); }
+      18%  { transform: scale(calc(1 + 0.18 * var(--j, 1)), calc(1 - 0.18 * var(--j, 1))); }
+      34%  { transform: scale(calc(1 - 0.14 * var(--j, 1)), calc(1 + 0.14 * var(--j, 1))) rotate(calc(-2deg * var(--j, 1))); }
+      50%  { transform: scale(calc(1 + 0.08 * var(--j, 1)), calc(1 - 0.07 * var(--j, 1))) rotate(calc(1.5deg * var(--j, 1))); }
+      66%  { transform: scale(calc(1 - 0.04 * var(--j, 1)), calc(1 + 0.04 * var(--j, 1))) rotate(calc(-0.8deg * var(--j, 1))); }
+      82%  { transform: scale(calc(1 + 0.02 * var(--j, 1)), calc(1 - 0.02 * var(--j, 1))); }
       100% { transform: scale(1, 1); }
     }
     .sprite img {
@@ -249,6 +250,8 @@
 
   function applySettings() {
     const op = Math.min(1, Math.max(0.1, settings.opacity / 100));
+    const j = Math.max(0, (settings.jellyLevel ?? 100) / 100);
+    host.style.setProperty('--j', String(j));
     kissEl.style.opacity = op;
     mascotEl.style.opacity = op;
     kissEl.classList.toggle('hidden', !settings.enabled || !settings.showKiss);
@@ -287,14 +290,17 @@
       start.moved = true;
       el.classList.add('dragging');
       if (settings.lockPos) {
-        // Khi khóa vị trí: kéo sẽ làm nhân vật giãn nhẹ đàn hồi như thạch (giới hạn tối đa ~16%)
-        body.classList.remove('jelly');
-        const tx = Math.tanh(dx / 90) * 14;
-        const ty = Math.tanh(dy / 90) * 14;
-        const sx = 1 + Math.tanh(Math.abs(dx) / 110) * 0.16 - Math.tanh(Math.abs(dy) / 110) * 0.08;
-        const sy = 1 + Math.tanh(Math.abs(dy) / 110) * 0.16 - Math.tanh(Math.abs(dx) / 110) * 0.08;
-        const rot = Math.tanh(dx / 110) * 4;
-        body.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+        // Khi khóa vị trí: kéo sẽ làm nhân vật giãn nhẹ đàn hồi như thạch theo mức jellyLevel
+        const k = Math.max(0, (settings.jellyLevel ?? 100) / 100);
+        if (k > 0) {
+          body.classList.remove('jelly');
+          const tx = Math.tanh(dx / 90) * 14 * k;
+          const ty = Math.tanh(dy / 90) * 14 * k;
+          const sx = Math.max(0.5, 1 + (Math.tanh(Math.abs(dx) / 110) * 0.16 - Math.tanh(Math.abs(dy) / 110) * 0.08) * k);
+          const sy = Math.max(0.5, 1 + (Math.tanh(Math.abs(dy) / 110) * 0.16 - Math.tanh(Math.abs(dx) / 110) * 0.08) * k);
+          const rot = Math.tanh(dx / 110) * 4 * k;
+          body.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+        }
         return;
       }
       const pos = clampPos(el, { x: start.x + dx, y: start.y + dy });
@@ -331,6 +337,7 @@
     let clickTimer = null;
 
     function jelly() {
+      if ((settings.jellyLevel ?? 100) <= 0) return;
       body.classList.remove('jelly');
       void body.offsetWidth; // reflow để animation chạy lại từ đầu
       body.classList.add('jelly');

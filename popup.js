@@ -6,12 +6,13 @@ const DEFAULTS = {
   kissSize: 200,
   mascotSize: 170,
   opacity: 100,
+  jellyLevel: 100,
   kissPos: null,
   mascotPos: null
 };
 
 const toggles = ['enabled', 'showKiss', 'showMascot', 'lockPos'];
-const ranges = { kissSize: 'px', mascotSize: 'px', opacity: '%' };
+const ranges = { kissSize: 'px', mascotSize: 'px', opacity: '%', jellyLevel: '%' };
 
 chrome.storage.local.get(DEFAULTS, (s) => {
   toggles.forEach((id) => {
