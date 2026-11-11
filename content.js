@@ -365,29 +365,32 @@
   makeDraggable(mascotEl, 'mascotPos');
 
   /* ---------- Đổi GIF cho nhân vật ---------- */
-  let restartCounter = 0;
+  let showToken = 0;
 
-  // Thêm query khác nhau để GIF luôn phát lại từ frame đầu.
-  // onShown được gọi đúng lúc GIF bắt đầu hiển thị (để hẹn giờ chính xác).
+  // Chuyển layer mượt, không dùng setTimeout xóa src (tránh lỗi race condition làm mất write.gif)
   function showGif(key, onShown) {
-    const back = layers[1 - frontLayer];
+    const token = ++showToken;
+    const nextIdx = 1 - frontLayer;
+    const back = layers[nextIdx];
     const front = layers[frontLayer];
-    const src = GIFS[key] + '?r=' + (++restartCounter);
-    back.onload = () => {
+    back.onload = null;
+    back.onerror = null;
+    back.removeAttribute('src');
+
+    let done = false;
+    const commit = () => {
+      if (done || token !== showToken) return;
+      done = true;
       back.onload = null;
       back.classList.add('show');
       front.classList.remove('show');
-      frontLayer = 1 - frontLayer;
+      frontLayer = nextIdx;
       if (onShown) onShown();
-      // giải phóng bộ nhớ của GIF cũ sau khi chuyển xong
-      setTimeout(() => {
-        if (layers[1 - frontLayer] === front && !front.classList.contains('show')) {
-          front.removeAttribute('src');
-        }
-      }, 300);
     };
-    back.onerror = () => { back.onerror = null; };
-    back.src = src;
+
+    back.onload = commit;
+    back.src = GIFS[key];
+    if (back.complete && back.naturalWidth > 0) commit();
   }
 
   /* ==========================================================================
@@ -433,20 +436,29 @@
   /* ==========================================================================
      4. PHÁT HIỆN TRẠNG THÁI GEMINI
      ========================================================================== */
-  // Nút Stop xuất hiện trong khi Gemini đang xử lý / trả lời
+  // Nút Stop xuất hiện trong khi Gemini đang xử lý / trả lời (hỗ trợ đa ngôn ngữ & giao diện mới)
   const STOP_CLASS_SELECTORS = [
     'button.send-button.stop',
     '.send-button-container button.stop',
-    'button[data-test-id="stop-button"]'
+    'button[data-test-id="stop-button"]',
+    'button[data-test-id*="stop"]',
+    '.blue-circle.stop-icon',
+    'button .stop-icon'
   ];
   const STOP_GENERIC_SELECTORS = [
     'button[aria-label*="Stop" i]',
     'button[aria-label*="Dừng" i]',
+    'button[aria-label*="停止"]',
+    'button[aria-label*="중지"]',
+    'button[aria-label*="Arrêter" i]',
+    'button[aria-label*="Detener" i]',
     'mat-icon[fonticon="stop"]',
     'mat-icon[data-mat-icon-name="stop"]',
-    'mat-icon[fonticon="stop_circle"]'
+    'mat-icon[fonticon="stop_circle"]',
+    'mat-icon[data-mat-icon-name="stop_circle"]'
   ];
-  const INPUT_SELECTOR = 'rich-textarea, .ql-editor, [contenteditable="true"]';
+  const INPUT_SELECTOR = 'rich-textarea, .ql-editor, [contenteditable="true"], textarea';
+  const THOUGHT_SELECTOR = 'model-thoughts, .thoughts-container, .thoughts-content, [data-test-id*="thought"], [class*="thoughts-"], [class*="-thoughts"]';
 
   function isVisible(el) {
     return !!(el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
@@ -454,7 +466,7 @@
 
   function nearInput(el) {
     let node = el;
-    for (let i = 0; i < 8 && node; i++) {
+    for (let i = 0; i < 10 && node; i++) {
       node = node.parentElement;
       if (node && node.querySelector(INPUT_SELECTOR)) return true;
     }
@@ -473,42 +485,77 @@
         if (isVisible(btn) && nearInput(btn)) return true;
       }
     }
+    // Kiểm tra thêm icon ligature (Material Symbols) trong nút cạnh ô nhập
+    const icons = document.querySelectorAll('button mat-icon, button .google-symbols, button .material-symbols-outlined');
+    for (const icon of icons) {
+      const txt = (icon.textContent || '').trim().toLowerCase();
+      if ((txt === 'stop' || txt === 'stop_circle' || txt === 'filled_stop') && isVisible(icon) && nearInput(icon)) {
+        return true;
+      }
+    }
     return false;
   }
 
   function getLastResponse() {
-    const list = document.querySelectorAll('model-response');
-    return list.length ? list[list.length - 1] : null;
+    const list = document.querySelectorAll('model-response, [data-message-author-role="model"], [data-message-author="model"]');
+    if (list.length) return list[list.length - 1];
+    const containers = document.querySelectorAll('.response-container, .model-response-text');
+    return containers.length ? containers[containers.length - 1] : null;
   }
 
-  // Độ dài phần chữ trả lời (bỏ qua phần "suy nghĩ" của model)
+  // Độ dài phần chữ trả lời thực tế (bỏ qua phần "suy nghĩ" model-thoughts)
   function answerLength(resp) {
     if (!resp) return 0;
-    let nodes = resp.querySelectorAll('message-content');
-    if (!nodes.length) nodes = resp.querySelectorAll('.markdown');
+    const candidates = Array.from(
+      resp.querySelectorAll('message-content, .model-response-text, .markdown-main-panel, .markdown, .response-content, .response-container-content, code-block')
+    ).filter((el) => !el.closest(THOUGHT_SELECTOR));
+
+    // Chỉ lấy các node cấp cao nhất để không cộng trùng lặp cha + con
+    const topNodes = candidates.filter((el) => !candidates.some((other) => other !== el && other.contains(el)));
+
     let len = 0;
-    nodes.forEach((n) => {
-      if (n.closest('model-thoughts, .thoughts-container')) return;
-      len += (n.textContent || '').trim().length;
-      n.querySelectorAll('model-thoughts, .thoughts-container').forEach((t) => {
-        len -= (t.textContent || '').trim().length;
+    if (topNodes.length) {
+      topNodes.forEach((n) => {
+        let sub = (n.textContent || '').trim().length;
+        n.querySelectorAll(THOUGHT_SELECTOR).forEach((t) => {
+          sub -= (t.textContent || '').trim().length;
+        });
+        len += Math.max(0, sub);
       });
-    });
-    // Ảnh/nội dung media trong câu trả lời cũng tính là "đã viết"
-    if (len <= 0 && resp.querySelector('message-content img, generated-image, single-image')) len = 1;
+    } else {
+      // Dự phòng nếu Gemini đổi cấu trúc thẻ bên trong model-response
+      let sub = (resp.textContent || '').trim().length;
+      resp.querySelectorAll(THOUGHT_SELECTOR + ', button, mat-icon, svg, [aria-hidden="true"]').forEach((t) => {
+        sub -= (t.textContent || '').trim().length;
+      });
+      len = Math.max(0, sub);
+    }
+
+    // Ảnh / media / canvas trong câu trả lời cũng tính là đang/đã viết
+    if (len <= 0) {
+      const media = resp.querySelectorAll('img, generated-image, single-image, canvas-panel, immersive-editor');
+      for (const m of media) {
+        if (!m.closest(THOUGHT_SELECTOR) && !m.closest('.avatar, [class*="avatar"], [class*="icon"]')) {
+          len = 1;
+          break;
+        }
+      }
+    }
     return Math.max(0, len);
   }
 
-  const GROW_WINDOW = 1500;   // chữ tăng trong 1.5s gần nhất -> đang viết
-  const IDLE_GRACE = 900;     // chờ thêm trước khi quay về idle (tránh nháy)
+  const GROW_WINDOW = 1600;   // chữ tăng trong 1.6s gần nhất -> đang viết
+  const MIN_WRITE_MS = 1400;  // giữ write.gif tối thiểu 1.4s để câu trả lời ngắn không bị lướt mất
+  const IDLE_GRACE = 900;     // chờ thêm trước khi kết thúc (tránh nháy)
   const SUBMIT_TIMEOUT = 60000;
 
   let lastResp = null;
   let lastLen = 0;
   let lastGrowAt = -Infinity;
+  let writeStartedAt = -Infinity;
   let navAt = performance.now();
   let lastUrl = location.href;
-  let episode = null;          // {baseResp, baseLen, sawStop}
+  let episode = null;          // {baseResp, baseLen, sawStop, wrote, submitted}
   let submitPending = 0;       // thời điểm gửi câu hỏi (0 = không chờ)
   let lastBusyAt = -Infinity;
 
@@ -526,47 +573,67 @@
 
   function evaluate() {
     const now = performance.now();
+    const stop = isStopVisible();
 
     if (location.href !== lastUrl) {
-      // Chuyển cuộc trò chuyện: reset để không nhầm lúc load nội dung cũ là "đang viết"
       lastUrl = location.href;
-      navAt = now;
-      lastResp = null;
-      lastLen = 0;
-      lastGrowAt = -Infinity;
-      if (!submitPending) episode = null;
+      // Chỉ reset khi chuyển sang cuộc trò chuyện khác lúc đang rảnh.
+      // Nếu đang gửi câu hỏi ở chat mới (/app -> /app/<id>) thì giữ nguyên episode!
+      if (!submitPending && !episode && !stop) {
+        navAt = now;
+        lastResp = null;
+        lastLen = 0;
+        lastGrowAt = -Infinity;
+      }
     }
 
     const resp = getLastResponse();
     const len = answerLength(resp);
-    if (resp && resp === lastResp && len > lastLen && now - navAt > 2500) lastGrowAt = now;
+    const inNavCooldown = !submitPending && !episode && !stop && (now - navAt < 1800);
+
+    if (!inNavCooldown && resp) {
+      if (resp === lastResp && len > lastLen) {
+        lastGrowAt = now;
+      } else if (resp !== lastResp && episode && resp !== episode.baseResp && len > 0) {
+        // Phản hồi mới vừa xuất hiện và đã có sẵn chữ trả lời
+        lastGrowAt = now;
+      }
+    }
     lastResp = resp;
     lastLen = len;
 
-    const stop = isStopVisible();
     const growing = now - lastGrowAt < GROW_WINDOW;
+    const hasNewText = len > 0 && (growing || !!(episode && (resp !== episode.baseResp || len > episode.baseLen)));
 
     if (submitPending) {
       const elapsed = now - submitPending;
       if (elapsed > SUBMIT_TIMEOUT) submitPending = 0;
-      else if (episode && episode.sawStop && !stop && !growing) submitPending = 0;
-      // Không thấy nút Stop và cũng không có câu trả lời mới -> có lẽ gửi không thành công
-      else if (elapsed > 10000 && episode && !episode.sawStop && resp === episode.baseResp) submitPending = 0;
+      else if (episode && (episode.sawStop || episode.wrote) && !stop && !growing) submitPending = 0;
+      // Không thấy nút Stop và cũng không có câu trả lời mới -> gửi không thành công
+      else if (elapsed > 10000 && episode && !episode.sawStop && !hasNewText && resp === episode.baseResp) submitPending = 0;
     }
 
-    const busy = stop || growing || !!submitPending;
+    const writeHold = episode && episode.wrote && (now - writeStartedAt < MIN_WRITE_MS);
+    const busy = stop || growing || !!submitPending || !!writeHold;
 
     if (busy) {
       if (!episode) startEpisode();
       if (stop) episode.sawStop = true;
       lastBusyAt = now;
-      const hasNewText = len > 0 && (resp !== episode.baseResp || len !== episode.baseLen);
-      if (hasNewText && growing) submitPending = 0; // đã bắt đầu viết
-      if (hasNewText) episode.wrote = true;
-      setState(hasNewText ? 'write' : 'think');
+      const writing = hasNewText || (episode && episode.wrote);
+      if (writing) {
+        if (!episode.wrote) {
+          episode.wrote = true;
+          writeStartedAt = now;
+        }
+        if (growing) submitPending = 0;
+        setState('write');
+      } else {
+        setState('think');
+      }
     } else if (now - lastBusyAt > IDLE_GRACE) {
       // Vừa trả lời xong -> impress.gif (tự về idle khi phát xong)
-      const finished = episode && (episode.sawStop || (episode.wrote && episode.submitted));
+      const finished = episode && (episode.sawStop || episode.wrote);
       episode = null;
       if (finished) setState('impress');
       else if (currentState !== 'impress') setState('idle');
@@ -613,6 +680,16 @@
     if (touched) applySettings();
   });
 
+  let evalScheduled = false;
+  function scheduleEvaluate() {
+    if (evalScheduled) return;
+    evalScheduled = true;
+    setTimeout(() => {
+      evalScheduled = false;
+      evaluate();
+    }, 80);
+  }
+
   function init(stored) {
     settings = { ...DEFAULTS, ...(stored || {}) };
     mount();
@@ -622,8 +699,24 @@
     setInterval(() => {
       mount(); // Gemini là SPA, đảm bảo host không bị gỡ
       evaluate();
-    }, 350);
-    // Tính sẵn thời lượng GIF leisure
+    }, 300);
+
+    // Theo dõi DOM thời gian thực để bắt kịp ngay cả những câu trả lời cực nhanh
+    const obs = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        const t = m.target;
+        const el = t && (t.nodeType === 1 ? t : t.parentElement);
+        if (el && !host.contains(el)) {
+          scheduleEvaluate();
+          break;
+        }
+      }
+    });
+    if (document.body) {
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+
+    // Tính sẵn thời lượng GIF
     getDuration('leisure1');
     getDuration('leisure2');
     getDuration('impress');
